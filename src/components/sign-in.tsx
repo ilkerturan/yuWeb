@@ -1,0 +1,104 @@
+
+"use client";
+
+import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
+import { signInWithPopup, GoogleAuthProvider } from "firebase/auth";
+import { doc, setDoc, getDoc, serverTimestamp } from "firebase/firestore";
+
+import { Button } from "@/components/ui/button";
+import { useToast } from "@/hooks/use-toast";
+import { Loader2 } from "lucide-react";
+import { auth, db } from "@/lib/firebase";
+import { useAuth } from "@/context/auth-context";
+import { Logo } from "./logo";
+
+export function SignIn() {
+  const router = useRouter();
+  const { toast } = useToast();
+  const { user, loading: authLoading } = useAuth();
+  const [isSigningIn, setIsSigningIn] = useState(false);
+
+  useEffect(() => {
+    if (!authLoading && user) {
+      router.push("/dashboard");
+    }
+  }, [user, authLoading, router]);
+
+  const handleSignIn = async () => {
+    setIsSigningIn(true);
+    const provider = new GoogleAuthProvider();
+    try {
+      const result = await signInWithPopup(auth, provider);
+      const user = result.user;
+
+      const userDocRef = doc(db, "users", user.uid);
+      const userDoc = await getDoc(userDocRef);
+
+      if (!userDoc.exists()) {
+        // New user, create a document in Firestore
+        await setDoc(userDocRef, {
+          uid: user.uid,
+          displayName: user.displayName,
+          email: user.email,
+          photoURL: user.photoURL,
+          createdAt: serverTimestamp(),
+          dueDate: null,
+          pregnancyStartDate: null,
+          journalStreak: 0,
+          longestJournalStreak: 0,
+          lastJournalEntry: null,
+          missionStreak: 0,
+          longestMissionStreak: 0,
+          lastMissionCompletionDate: null,
+          unitPreference: 'imperial'
+        });
+      }
+      
+      toast({
+        title: "Login Successful",
+        description: "Redirecting to your dashboard...",
+      });
+      // The useEffect will handle the redirection
+    } catch (error: any) {
+      console.error("Authentication error:", error);
+      toast({
+        variant: "destructive",
+        title: "Authentication Failed",
+        description: error.message || "Please try again.",
+      });
+    } finally {
+      setIsSigningIn(false);
+    }
+  };
+
+  if (authLoading || user) {
+    return (
+       <div className="flex h-screen items-center justify-center bg-secondary/50">
+          <Loader2 className="h-12 w-12 animate-spin text-primary" />
+       </div>
+    );
+  }
+
+  return (
+    <div className="flex min-h-screen items-center justify-center bg-secondary/50 p-4">
+      <div className="w-full max-w-md space-y-6">
+        <div className="text-center">
+          <div className="w-[300px] h-[300px] mx-auto mb-4">
+            <Logo />
+          </div>
+          <h1 className="text-3xl font-headline font-bold">Welcome to yuPregnancy</h1>
+          <p className="text-muted-foreground">Sign in with Google to begin your journey.</p>
+        </div>
+        <div className="rounded-lg border bg-card text-card-foreground shadow-sm p-8 text-center">
+          <Button onClick={handleSignIn} disabled={isSigningIn} size="lg">
+            {isSigningIn && (
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            )}
+            Sign in with Google
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
